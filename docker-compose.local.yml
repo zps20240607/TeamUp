@@ -1,0 +1,97 @@
+services:
+  team-mysql:
+    image: mysql:8.0
+    container_name: team-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "123456"
+      MYSQL_DATABASE: "school_teamup"
+      TZ: "Asia/Shanghai"
+    volumes:
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - team_mysql_data:/var/lib/mysql
+    ports:
+      - "3307:3306"
+    networks:
+      - team-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p123456"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  team-redis:
+    image: redis:7-alpine
+    container_name: team-redis
+    restart: unless-stopped
+    command: redis-server /usr/local/etc/redis/redis.conf
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - team_redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - team-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "123456", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  team-backend:
+    build:
+      context: ./backend
+    image: team-backend:latest
+    container_name: team-backend
+    restart: unless-stopped
+    environment:
+      # 数据库 & Redis
+      SPRING_DATASOURCE_URL: "jdbc:mysql://team-mysql:3306/school_teamup?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true"
+      SPRING_DATASOURCE_USERNAME: "root"
+      SPRING_DATASOURCE_PASSWORD: "123456"
+      SPRING_DATA_REDIS_HOST: "team-redis"
+      SPRING_DATA_REDIS_PORT: "6379"
+      SPRING_DATA_REDIS_PASSWORD: "123456"
+      SPRING_DATA_REDIS_DATABASE: "10"
+      # LangChain4j 大模型
+      LANGCHAIN_BASE_URL: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+      LANGCHAIN_API_KEY: "${LANGCHAIN_API_KEY}"
+      LANGCHAIN_MODEL_NAME: "qwen-plus"
+      LANGCHAIN_TEMPERATURE: "0.7"
+      LANGCHAIN_MAX_TOKENS: "2000"
+      LANGCHAIN_TIMEOUT: "120"
+      # JWT
+      JWT_SECRET: "${JWT_SECRET:-please-set-JWT_SECRET-in-.env}"
+      TZ: "Asia/Shanghai"
+    volumes:
+      - ./backend/application.yml:/app/config/application.yml:ro
+    ports:
+      - "8080:8080"
+    networks:
+      - team-network
+    depends_on:
+      team-mysql:
+        condition: service_healthy
+      team-redis:
+        condition: service_healthy
+
+  team-nginx:
+    build:
+      context: ./frontend
+    image: team-frontend:latest
+    container_name: team-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    networks:
+      - team-network
+    depends_on:
+      - team-backend
+
+volumes:
+  team_mysql_data:
+  team_redis_data:
+
+networks:
+  team-network:
+    driver: bridge

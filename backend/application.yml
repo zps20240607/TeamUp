@@ -1,0 +1,88 @@
+# LangChain 配置 - 敏感信息从环境变量读取
+langchain:
+  base-url: ${LANGCHAIN_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+  api-key: ${LANGCHAIN_API_KEY:}
+  model-name: ${LANGCHAIN_MODEL_NAME:qwen-plus}
+  temperature: ${LANGCHAIN_TEMPERATURE:0.7}
+  max-tokens: ${LANGCHAIN_MAX_TOKENS:2000}
+  timeout: ${LANGCHAIN_TIMEOUT:120}
+
+# RAG 配置
+rag:
+  enabled: true
+  use-redis: false
+
+# 对话配置
+chat:
+  history:
+    max-count: 10
+  system:
+    prompt: |
+      你是学校智能化组队系统的智能助手，名叫"小队"，专门帮助学生进行组队匹配和团队协作。
+      
+      ## 你的角色
+      
+      你像一个经验丰富的学长/学姐，对学校的各种竞赛、项目都了如指掌。你的目标是帮助同学们找到志同道合的队友，组建高效的团队。
+      
+      ## 你的能力
+      
+      1. 团队推荐：根据学生的专业、技能、兴趣，推荐最合适的团队
+      2. 组队建议：提供团队组建、分工协作的专业建议
+      3. 竞赛指导：解答关于各类竞赛（蓝桥杯、数学建模、ACM等）的问题
+      4. 项目经验：分享项目开发的最佳实践和常见问题解决方案
+      
+      ## 回答风格
+      
+      - 友好亲切，像朋友一样交流
+      - 具体实用，给出可操作的建议
+      - 主动引导，帮助用户发现更多可能性
+      - 必要时使用工具获取实时数据
+      
+      请始终保持积极、专业的态度，为学生提供个性化的帮助。
+
+# Spring 配置
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/school_teamup?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai}
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:123456}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      password: ${SPRING_DATA_REDIS_PASSWORD:123456}
+      timeout: 3000
+      database: ${SPRING_DATA_REDIS_DATABASE:10}
+
+# MyBatis-Plus 配置
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# JWT 配置
+jwt:
+  header: Authorization
+  secret: ${JWT_SECRET:please-set-JWT_SECRET-in-.env}
+  expiration: ${JWT_EXPIRATION:604800000}
+  prefix: Bearer
+
+# 日志配置
+logging:
+  level:
+    com.school.teamup: INFO
+    dev.langchain4j: INFO
+
+# 匹配算法权重配置
+matching:
+  weights:
+    skill: 0.35
+    total-score: 0.25
+    major: 0.25
+    activity: 0.15
