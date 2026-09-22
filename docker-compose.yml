@@ -4,18 +4,23 @@ services:
     container_name: team-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: "123456"
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:?请在 .env 中设置 MYSQL_ROOT_PASSWORD}"
       MYSQL_DATABASE: "school_teamup"
       TZ: "Asia/Shanghai"
     volumes:
       - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - team_mysql_data:/var/lib/mysql
-    ports:
-      - "3306:3306"
+    # 不向宿主机发布 3306：team-backend 通过 team-network 以服务名 team-mysql 访问，
+    # 发布端口只会把数据库暴露到宿主机（云服务器上等于暴露到公网）。
+    # 确需本机客户端连库调试时，取消注释并【只绑定回环地址】：
+    # ports:
+    #   - "127.0.0.1:3306:3306"
+    expose:
+      - "3306"
     networks:
       - team-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p123456"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -24,16 +29,26 @@ services:
     image: redis:7-alpine
     container_name: team-redis
     restart: unless-stopped
-    command: redis-server /usr/local/etc/redis/redis.conf
+    environment:
+      REDIS_PASSWORD: "${REDIS_PASSWORD:?请在 .env 中设置 REDIS_PASSWORD}"
+    # 密码通过命令行注入，不再写死在 redis.conf / 仓库里
+    command:
+      - "redis-server"
+      - "/usr/local/etc/redis/redis.conf"
+      - "--requirepass"
+      - "${REDIS_PASSWORD:?请在 .env 中设置 REDIS_PASSWORD}"
     volumes:
       - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
       - team_redis_data:/data
-    ports:
-      - "6379:6379"
+    # 同 MySQL：Redis 不向宿主机发布端口
+    # ports:
+    #   - "127.0.0.1:6379:6379"
+    expose:
+      - "6379"
     networks:
       - team-network
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "123456", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -41,27 +56,28 @@ services:
   team-backend:
     build:
       context: ./backend
+      dockerfile: Dockerfile
     image: team-backend:latest
     container_name: team-backend
     restart: unless-stopped
     environment:
-      # 数据库 & Redis
+      # 数据库 & Redis：全部来自 .env，仓库内不保留任何口令
       SPRING_DATASOURCE_URL: "jdbc:mysql://team-mysql:3306/school_teamup?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true"
       SPRING_DATASOURCE_USERNAME: "root"
-      SPRING_DATASOURCE_PASSWORD: "123456"
+      SPRING_DATASOURCE_PASSWORD: "${MYSQL_ROOT_PASSWORD:?请在 .env 中设置 MYSQL_ROOT_PASSWORD}"
       SPRING_DATA_REDIS_HOST: "team-redis"
       SPRING_DATA_REDIS_PORT: "6379"
-      SPRING_DATA_REDIS_PASSWORD: "123456"
+      SPRING_DATA_REDIS_PASSWORD: "${REDIS_PASSWORD:?请在 .env 中设置 REDIS_PASSWORD}"
       SPRING_DATA_REDIS_DATABASE: "10"
-      # LangChain4j 大模型（⚠️ 生产环境请替换 API Key）
+      # LangChain4j 大模型
       LANGCHAIN_BASE_URL: "https://dashscope.aliyuncs.com/compatible-mode/v1"
-      LANGCHAIN_API_KEY: "${LANGCHAIN_API_KEY}"
+      LANGCHAIN_API_KEY: "${LANGCHAIN_API_KEY:?请在 .env 中设置 LANGCHAIN_API_KEY}"
       LANGCHAIN_MODEL_NAME: "qwen-plus"
       LANGCHAIN_TEMPERATURE: "0.7"
       LANGCHAIN_MAX_TOKENS: "2000"
       LANGCHAIN_TIMEOUT: "120"
-      # JWT（⚠️ 生产环境请替换密钥）
-      JWT_SECRET: "${JWT_SECRET:-please-set-JWT_SECRET-in-.env}"
+      # JWT
+      JWT_SECRET: "${JWT_SECRET:?请在 .env 中设置 JWT_SECRET}"
       TZ: "Asia/Shanghai"
     volumes:
       - ./backend/application.yml:/app/config/application.yml:ro
@@ -78,6 +94,7 @@ services:
   team-nginx:
     build:
       context: ./frontend
+      dockerfile: Dockerfile
     image: team-frontend:latest
     container_name: team-frontend
     restart: unless-stopped
